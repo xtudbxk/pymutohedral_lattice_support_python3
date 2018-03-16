@@ -28,8 +28,8 @@ class HashTablePermutohedral(object):
         self.capacity = 2 ** 15
         self.filled = 0
         self.entries = [{'key_idx': -1, 'value_idx': -1} for _ in range(self.capacity)]
-        self.keys = np.zeros((kd_ * self.capacity / 2), dtype='int16')
-        self.values = np.zeros((vd_ * self.capacity / 2), dtype='float32')
+        self.keys = np.zeros((kd_ * self.capacity // 2), dtype='int16')
+        self.values = np.zeros((vd_ * self.capacity // 2), dtype='float32')
 
     def size(self):
         return self.filled
@@ -213,7 +213,7 @@ class PermutohedralLattice(object):
         ref : numpy array
             The lattice to use for filtering
         debug : boolean, default True
-            Whether the function should print its current state and the different run times
+            Whether the function should #print its current state and the different run times
         """
         run_times = [time()]
 
@@ -226,27 +226,40 @@ class PermutohedralLattice(object):
         col = np.zeros((inp.shape[-1] + 1), dtype='float32')
         col[-1] = 1.  # homogeneous coordinate
 
+        #print("in 0.5 -")
         # roll out ref to support running indexing
+        #print("ref:%s" % str(ref))
+        #print("ref shape:%s" % str(ref.shape))
         ref_channels = ref.shape[-1]
         ref = ref.flatten()
+        #print("0.675")
         ref_ptr = 0
+        #print("inp:%s" % str(inp))
+        #print("inp shape:%s" % str(inp.shape))
         for r in range(inp.shape[0]):  # height
             for c in range(inp.shape[1]):  # width
                 col[:-1] = inp[r, c, :]
+                #print("ref:%s" % str(ref))
+                #print("ref shape:%s" % str(ref.shape))
+                #print("col:%s" % str(col))
+                #print("col shape:%s" % str(col.shape))
                 lattice.splat(ref, ref_ptr, col)
                 ref_ptr += ref_channels
 
+        #print("in 0.75")
         # Blur the lattice
         if debug:
             run_times.append(time())
             log.info('Blurring...')
         lattice.blur()
 
+        #print("in 0.875")
         # Slice from the lattice
         if debug:
             run_times.append(time())
             log.info('Slicing...')
         out = np.zeros_like(inp)
+        #print("in 1")
 
         lattice.begin_slice()
         for r in range(inp.shape[0]):  # height
@@ -255,12 +268,19 @@ class PermutohedralLattice(object):
                 scale = 1. / col[-1]
                 out[r, c, :] = col[:-1] * scale
 
+        #print("in 2")
         if debug:
             run_times.append(time())
             names = ['Init', 'Splat', 'Blur', 'Slice']
-            log.info('Timing table (including prints)')
+            log.info('Timing table (including #prints)')
+            #print("in 3")
             for i in range(len(names)):
+                #print("in 4")
+                #print("names[i]:%s" % str(names[i]))
+                #print("run_times[i]:%s" % str(run_times[i]))
                 log.info('{}: {}s'.format(names[i], run_times[i + 1] - run_times[i]))
+                #print("in 5")
+        #print("in 6")
 
         return out
 
@@ -277,6 +297,7 @@ class PermutohedralLattice(object):
         """
 
         # first rotate position into the (d+1)-dimensional hyperplane
+        #print("in splat")
         self.elevated[self.d] = -self.d * position[pos_idx + self.d - 1] * self.scale_factor[self.d - 1]
         for i in range(self.d - 1, 0, -1):
             self.elevated[i] = self.elevated[i + 1] - \
@@ -284,12 +305,14 @@ class PermutohedralLattice(object):
                                (i + 2) * position[pos_idx + i] * self.scale_factor[i]
         self.elevated[0] = self.elevated[1] + 2 * position[pos_idx] * self.scale_factor[0]
 
+        #print("in splat 1")
         v = self.elevated * self.splat_scale
         v_ceil = np.ceil(v) * self.d1
         v_floor = np.floor(v) * self.d1
         self.greedy = np.where(v_ceil - self.elevated < self.elevated - v_floor, v_ceil, v_floor).astype('int16')
 
-        sum = np.sum(self.greedy) / self.d1
+        #print("in splat 2")
+        sum = np.sum(self.greedy) // self.d1 # sum must is int
 
         # reset rank
         self.rank *= 0
@@ -303,20 +326,32 @@ class PermutohedralLattice(object):
                 else:
                     self.rank[j] += 1
 
+        #print("in splat 3")
+        #print("sum:%s" % str(sum))
         if sum > 0:
             # sum too large - the point is off the hyperplane.
             # need to bring down the ones with the smallest differential
+            #print("sum:%s" % str(sum))
             cond_mask = self.rank >= self.d1 - sum
+            #print("cond_mask:%s" % str(cond_mask))
+            #print("self.greedy:%s" % str(self.greedy))
+            #print("self.rank:%s" % str(self.rank))
             self.greedy[cond_mask] -= self.d1
             self.rank[cond_mask] -= self.d1
         elif sum < 0:
             # sum too small - the point is off the hyperplane
             # need to bring up the ones with largest differential
+            #print("sum:%s" % str(sum))
+            #print("self.rank:%s" % str(self.rank))
             cond_mask = self.rank < -sum
+            #print("cond_mask:%s" % str(cond_mask))
+            #print("self.greedy:%s" % str(self.greedy))
             self.greedy[cond_mask] += self.d1
             self.rank[cond_mask] += self.d1
 
+        #print("self.rank:%s" % str(self.rank))
         self.rank += sum
+        #print("in splat 4")
 
         # reset barycentric
         self.barycentric *= 0
@@ -359,6 +394,7 @@ class PermutohedralLattice(object):
             A single position on the lattice
         """
         base = self.hash_table.get_values()
+        col[:self.vd] = 0
         col[:self.vd] = 0
         for i in range(self.d1):
             r = self.replay[self.nReplay]
